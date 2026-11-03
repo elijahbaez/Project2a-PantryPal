@@ -6,6 +6,29 @@
 #include "RedBlackTree.h"
 #include "HashMap.h"
 
+// Helper to split comma separated input
+std::vector<std::string> splitIngredients(const std::string& input) {
+    std::vector<std::string> ingredients;
+    std::stringstream ss(input);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        std::string cleaned = sanitizeString(item);
+        if (!cleaned.empty()) {
+            ingredients.push_back(cleaned);
+        }
+    }
+    return ingredients;
+}
+
+// Helper to intersect two vectors (finding common recipe indices)
+std::vector<int> intersectVectors(std::vector<int> v1, std::vector<int> v2) {
+    std::vector<int> result;
+    std::sort(v1.begin(), v1.end());
+    std::sort(v2.begin(), v2.end());
+    std::set_intersection(v1.begin(), v1.end(), v2.begin(), v2.end(), std::back_inserter(result));
+    return result;
+}
+
 int main() {
     std::cout << "--- PantryPal Recipe Finder ---" << std::endl;
     std::cout << "Loading dataset..." << std::endl;
