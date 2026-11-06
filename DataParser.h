@@ -18,10 +18,9 @@ private:
         for (size_t i = 0; i < line.size(); ++i) {
             char c = line[i];
             if (c == '"') {
-                // Handle escaped quotes in CSV ("")
                 if (i + 1 < line.size() && line[i+1] == '"') {
                     current += '"';
-                    i++; // skip second quote
+                    i++;
                 } else {
                     inQuotes = !inQuotes;
                 }
@@ -41,32 +40,30 @@ private:
         std::vector<std::string> items;
         std::string current = "";
         bool inQuotes = false;
-        char quoteChar = '\0'; // Tracks whether we started with ' or "
+        char quoteChar = '\0';
 
         for (size_t i = 0; i < listStr.size(); ++i) {
             char c = listStr[i];
 
-            // Handle escape characters inside the string
+            // Only escape quotes and slashes.
             if (c == '\\' && i + 1 < listStr.size()) {
-                if (inQuotes) {
-                    current += listStr[i + 1];
+                char nextChar = listStr[i+1];
+                if (nextChar == '\'' || nextChar == '"' || nextChar == '\\') {
+                    if (inQuotes) current += nextChar;
+                    i++;
+                    continue;
                 }
-                i++; // Skip the escaped character so we don't process it twice
-                continue;
             }
 
             if (c == '\'' || c == '"') {
                 if (!inQuotes) {
-                    // An item is starting
                     inQuotes = true;
                     quoteChar = c;
                 } else if (c == quoteChar) {
-                    // The matching quote was found, the item is ending
                     if (isIngredient) {
                         std::string sanitized = sanitizeString(current);
                         if (!sanitized.empty()) items.push_back(sanitized);
                     } else {
-                        // For steps, don't lowercase it. Trim leading/trailing spaces.
                         size_t start = current.find_first_not_of(" \t\n\r\f\v");
                         if (start != std::string::npos) {
                             current.erase(0, start);
@@ -98,13 +95,38 @@ public:
             return recipes;
         }
 
-        // Skip header line
-        std::getline(file, line);
+        std::getline(file, line); // Skip header
 
+        std::string fullRow = "";
+        bool inQuotes = false;
+
+        // MULTI-LINE CSV FIX
         while (std::getline(file, line)) {
-            std::vector<std::string> cols = parseCSVLine(line);
+            if (fullRow.empty()) {
+                fullRow = line;
+            } else {
+                fullRow += "\n" + line; // Re-add the newline that getline stripped
+            }
 
-            // RAW_recipes.csv has 12 columns. Ensure valid row.
+            // Check if this line closes the open quotes
+            for (size_t i = 0; i < line.size(); ++i) {
+                if (line[i] == '"') {
+                    // Handle escaped quotes ""
+                    if (i + 1 < line.size() && line[i+1] == '"') {
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                }
+            }
+
+            if (inQuotes) {
+                continue;
+            }
+
+            std::vector<std::string> cols = parseCSVLine(fullRow);
+            fullRow = ""; // Reset
+
             if (cols.size() < 11) continue;
 
             Recipe r;
@@ -112,18 +134,12 @@ public:
                 r.name = cols[0];
                 r.id = std::stoi(cols[1]);
                 r.minutes = std::stoi(cols[2]);
-
-                // Pass false for steps to preserve formatting/capitalization
                 r.steps = parseList(cols[8], false);
-
                 r.description = cols[9];
-
-                // Pass true for ingredients so they get lowercased for the search engine
                 r.ingredients = parseList(cols[10], true);
 
                 recipes.push_back(r);
-            } catch (const std::exception& e) {
-                // Skip rows with malformed numerical data
+            } catch (...) {
                 continue;
             }
         }
